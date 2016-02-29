@@ -1,0 +1,137 @@
+
+index
+========
+
+aspect  |  traditional tech | store procedure based tech
+--------|-------------------|--------
+**data access**  |  **complex**  |  **directly**
+install client driver required  |  yes  |  no
+configure connection pool required |  yes | no
+get statement from connection required | yes | no
+check exception required| yes | no
+define data structure according to table/view structure | yes | no
+data type conversion from db type to hosting language date type | yes | no
+null indicator required |  yes  | no
+may use OR mapping to ease data access | yes | no
+network roundtrip | access multiple table need multiple roundtrip | only one roundtrip, one for request, one for response
+** servlet container ** |  **in hosting language** | **just oracle instance**
+long lived server | no | yes, maximum of availability
+process model | multi-thread in one main process | multi-process or multi-thread
+auto restartable | no | yes
+exception tolarable | one exception may cause whole server crash |  only affect one servlet call
+memory management | ?  | use PGA/SGA(buffer/pool), avoid out of memory
+memory recycle | critical | not a problem natually, memory component resuse by default
+SQL binding |  need code rule  | static SQL, parameter binding by default
+hot patch/update |  dangourous, may need restart |  directly deploy new version of stored procedure 
+cluster | no for common |  servlet cross RAC,DG,DIST database instances。
+default for servlet sync in cluster  |  no |  in RAC/DG, stored procedure is sync
+finding problem SQL in source |  not easy  |  very easy
+finding which code have performance problem | ?  | use DBMS_HPROF, easy
+computation resource management | no | use resource manager for CPU,memory... control
+** html printing **  | **template engines, xSP** |  **concise printing API**
+readability | messy, mixed html and hosting lang code  |  clear, both html and plsql code is well formated
+
+
+通过网络链接数据库，使用各种数据库访问driver的架构在此都称为传统架构，包括：
+
+* 以 JAVA 语言为基础的 JSP/J2EE
+* 多语言的 .NET
+* PHP
+* 以 Ruby 语言为基础的 Rail
+* 以 Python 语言为基础的 Django
+
+传统架构主要做的工作 noradle 都能做，且更轻松：
+
+传统web/app服务器上部署的应用逻辑都做什么?
+
+- database access
+- bind template with data
+- access network service (optional)
+ 
+NORADLE 都可以做并且做的更好
+
+- 使用 pl/sql 访问处理数据最自然而简单
+- 丰富的输出 API
+- call out 支持
+ 
+所以 ORACLE 就是完整的应用服务器，可以部署 pl/sql servlet.
+
+各方面的好处
+-----------------
+
+- 学习和技能负担：语言，web开发环境，模板，数据访问，ORMapping，configuration
+- 部署、热升级
+- 稳定的 pl/sql servlet container
+- 数据和使用数据的逻辑贴近了，不再分散
+- 定位和调整性能不佳的 SQL 更为方便
+ 
+### 利用 oracle 这个最为稳定可靠的运行时容器
+
+* 多进程或多线程，充分利用多核
+* 基于 oracle SGA 中的 pool/buffer 的内存管理，还有 PGA/SGA分配比例控制，合理有效利用内存，防止内存溢出
+* 基本没有内存垃圾回收的问题，进程停滞等问题。
+* 存储过程程序模块化，可以直接互相调用，集成；不需要 include/import 等麻烦
+* SQL 在存储过程中静态化，直接应用参数绑定，默认避免了 shared pool 冲击
+* 热升级支持，改了内个存储过程，直接部署新版本到数据库即可，没有重启服务的要求
+* standby库中的pl/sql程序随着主数据库上程序的更新自动同步更新
+* RAC各节点的pl/sql程序自动保持同步
+* 调优更加方便，定位性能不佳的 SQL 所在的源码非常方便
+
+#### 不用担心内存溢出
+
+多进程访问共享内存(包括DBBuffer, GAC, Share Pool)模式，
+  服务进程在一定处理量和运行时间后自动退出并由新的进程代替，
+  永远不用担心服务进程内存管理问题（内存丢失、内存碎片），
+  而共享内存的管理按照 oracle 在全球广泛部署的实际应用情况看也不存在问题。
+  因此 Noradle 以 oracle PL/SQL 作为业务处理环境是非常稳定和可靠的，远胜目前主流的 java 应用服务器平台。
+  相反，像java等多线程的服务器都存在内存泄露和内存管理问题。
+
+#### 可以进行处理资源的合理分配
+
+  可以利用 oracle 自带的 resource manager 进行资源控制，确保各类型应用的资源进行分级管理，
+  防止个别出问题的应用毁掉整个的服务器，影响到其他正常应用。
+
+#### 可优化
+
+性能数据可以全面采集、分析，利用 oracle 的 profiler.
+
+
+
+
+ 
+关于三层架构和两层架构
+===================
+
+两层架构时期的问题
+----------------
+
+* 前端肥大，太多业务逻辑放到前端，安全性也差，变更升级难
+* 前端直接访问数据库，连接管理也是难题
+
+三层架构
+--------------
+
+* 三层架构剥离出中间层，放到应用服务器中。  
+* 原先位于客户端的商业逻辑放到服务端，更加安全，不会因客户端的篡改而发生问题。  
+* 原先位于存储过程中的商业逻辑也可以前移到中间层中，这样似乎可以降低数据库的负担，并且可以不依赖某特定数据库。
+
+但是
+
+* 从客户端转移到服务器端的商业逻辑也完全可以放到存储过程中实现
+* 使用存储过程实际上降低了系统处理开销，提高了响应速度
+
+还原两层架构
+-------------
+
+* 客户端采用任何纯静态页面架构，使用html/css/js预编辑器，如 node.js 的 harp
+* 服务端采用 noradle rest data service
+* 客户端通过 ajax 调用服务端获取和提交数据
+* 客户端可以部署再任何地址和域名下，可以部署到云平台或者CND上
+* 客户端通过 JSONP 访问 noradle 后台数据服务
+* 客户端使用 MVVM 模式进行UI到本地数据的双向绑定，开发非常像传统的两层应用，如 powerbuilder/dephi
+
+总结下和传统两层架构的变化
+
+* 客户端从 native 转为基于浏览器的页面
+* 访问数据服务从专有的数据库驱动转为通过的基于 http 的 restful data API
+* 服务器端从只提供sql服务，转变为提供完整的数据服务，SQL嵌入到服务器端的存储过程中
